@@ -34,6 +34,24 @@ class ClienteMODBUS():
     def escrever_holding_register(self, addr, valor):
         resp = self._cliente.write_register(address=addr, value=valor, device_id=1)
         return bool(resp and not resp.isError())
+    
+    # 3.0 Leitura e escrita de Coils
+
+    def ler_coils(self, addr, count=1):
+        """Lê o estado de uma ou mais bobinas (Coils)."""
+        resp = self._cliente.read_coils(address=int(addr), count=int(count), device_id=1)
+        if resp and not resp.isError():
+            return resp.bits[:count]
+        return None
+    
+    def escrever_coil(self, addr, valor):
+        """Escreve True/False (ou 1/0) em uma bobina (Coil)."""
+        if isinstance(valor, str):
+            bool_val = valor.strip().lower() in ('1', 'true', 'on', 'v', 'sim')
+        else:
+            bool_val = bool(int(valor))
+        resp = self._cliente.write_coil(address=int(addr), value=bool_val, device_id=1)
+        return bool(resp and not resp.isError())
 
     # 3.1 Leitura e escrita de float
 
