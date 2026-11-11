@@ -1,6 +1,7 @@
 from pymodbus.client import ModbusTcpClient
 from time import sleep
 
+
 class ClienteMODBUS():
     """COMUNICAÇÃO"""
     def __init__(self, server_ip='localhost', porta=502):
@@ -10,7 +11,7 @@ class ClienteMODBUS():
         self.conectado = False
 
     def configurar_conexao(self, server_ip, porta):
-        """Atualiza IP e porta a partir da interface gráfica."""
+        """Atualiza IP e porta dinamicamente a partir da interface gráfica."""
         if self.conectado:
             self.desconectar()
         self.server_ip = server_ip
@@ -18,132 +19,162 @@ class ClienteMODBUS():
         self._cliente = ModbusTcpClient(host=self.server_ip, port=self.porta)
 
     def conectar(self):
-        self.conectado = bool(self._cliente.connect())
-        return self.conectado
+        try:
+            self.conectado = bool(self._cliente.connect())
+            return self.conectado
+        except Exception:
+            self.conectado = False
+            return False
 
     def desconectar(self):
-        self._cliente.close()
-        self.conectado = False
+        try:
+            self._cliente.close()
+        finally:
+            self.conectado = False
 
     def ler_holding_registers(self, addr, count=1):
-        resp = self._cliente.read_holding_registers(address=addr, count=count, device_id=1)
-        if resp and not resp.isError():
-            return resp.registers
-        return None
+        try:
+            resp = self._cliente.read_holding_registers(address=int(addr), count=int(count), device_id=1)
+            if resp and not resp.isError():
+                return resp.registers
+            return None
+        except Exception:
+            return None
 
     def escrever_holding_register(self, addr, valor):
-        resp = self._cliente.write_register(address=addr, value=valor, device_id=1)
-        return bool(resp and not resp.isError())
-    
+        try:
+            resp = self._cliente.write_register(address=int(addr), value=int(valor), device_id=1)
+            return bool(resp and not resp.isError())
+        except Exception:
+            return False
+
     # 3.0 Leitura e escrita de Coils
 
     def ler_coils(self, addr, count=1):
         """Lê o estado de uma ou mais bobinas (Coils)."""
-        resp = self._cliente.read_coils(address=int(addr), count=int(count), device_id=1)
-        if resp and not resp.isError():
-            return resp.bits[:count]
-        return None
-    
+        try:
+            resp = self._cliente.read_coils(address=int(addr), count=int(count), device_id=1)
+            if resp and not resp.isError():
+                return resp.bits[:count]
+            return None
+        except Exception:
+            return None
+
     def escrever_coil(self, addr, valor):
         """Escreve True/False (ou 1/0) em uma bobina (Coil)."""
-        if isinstance(valor, str):
-            bool_val = valor.strip().lower() in ('1', 'true', 'on', 'v', 'sim')
-        else:
-            bool_val = bool(int(valor))
-        resp = self._cliente.write_coil(address=int(addr), value=bool_val, device_id=1)
-        return bool(resp and not resp.isError())
+        try:
+            if isinstance(valor, str):
+                bool_val = valor.strip().lower() in ('1', 'true', 'on', 'v', 'sim')
+            else:
+                bool_val = bool(int(valor))
+            resp = self._cliente.write_coil(address=int(addr), value=bool_val, device_id=1)
+            return bool(resp and not resp.isError())
+        except Exception:
+            return False
 
     # 3.1 Leitura e escrita de float
 
     def ler_float(self, addr):
         """Lê 2 registradores consecutivos e converte para float32."""
-        regs = self.ler_holding_registers(addr, count=2)
-        if regs:
-            return self._cliente.convert_from_registers(regs, self._cliente.DATATYPE.FLOAT32)
-        return None
+        try:
+            regs = self.ler_holding_registers(addr, count=2)
+            if regs and len(regs) == 2:
+                return round(self._cliente.convert_from_registers(regs, self._cliente.DATATYPE.FLOAT32), 4)
+            return None
+        except Exception:
+            return None
 
     def escreve_float(self, addr, valor_float):
         """Converte float32 para 2 registradores e escreve."""
-        regs = self._cliente.convert_to_registers(valor_float, self._cliente.DATATYPE.FLOAT32)
-        resp = self._cliente.write_registers(address=addr, values=regs, device_id=1)
-        return bool(resp and not resp.isError())
-    
-    # 3.2 Leitura dos bits do registrador
+        try:
+            regs = self._cliente.convert_to_registers(float(valor_float), self._cliente.DATATYPE.FLOAT32)
+            resp = self._cliente.write_registers(address=int(addr), values=regs, device_id=1)
+            return bool(resp and not resp.isError())
+        except Exception:
+            return False
 
-    def ler_bits(self, addr):
-        """Lê um registrador e retorna uma lista com o estado dos 16 bits (0 a 15)."""
+    # 3.2 Leitura dos bits do registrador (todos, individual ou múltiplos)
+
+    def ler_bits(self, addr, indices_bits=None):
+        """
+        Lê um registrador e retorna o estado dos bits (0 a 15).
+        - Se indices_bits for None ou vazio: retorna lista com os 16 bits.
+        - Se indices_bits for passado (ex: '6' ou '0,1,6'): retorna dicionário com os bits pedidos.
+        """
         regs = self.ler_holding_registers(addr, count=1)
-        if regs:
-            valor = regs[0]  # Extrai cada bit usando deslocamento (shift) e máscara lógica AND
-            return [(valor >> i) & 1 for i in range(16)]
-        return None
-    
-    # 3.3 Escrita de um bit individual
+        if not regs:
+            return None
+        valor = regs[0]
+        todos_bits = [(valor >> i) & 1 for i in range(16)]
+
+        if indices_bits is None or str(indices_bits).strip() == "":
+            return todos_bits
+
+        try:
+            lista_indices = [int(b.strip()) for b in str(indices_bits).split(',') if b.strip() != ""]
+            resultado = {}
+            for idx in lista_indices:
+                if 0 <= idx <= 15:
+                    resultado[f"Bit {idx}"] = todos_bits[idx]
+                else:
+                    return None
+            return resultado
+        except Exception:
+            return None
+
+    # 3.3 Escrita de um bit individual ou múltiplos bits
 
     def escreve_bit(self, addr, bit_index, valor_bit):
         """Altera um bit específico para 0 ou 1, preservando os restantes."""
-        if not (0 <= bit_index <= 15):
+        if not (0 <= int(bit_index) <= 15):
             return False
-            
-        # Sequência: Leitura, alteração com máscara e escrita
+
         regs = self.ler_holding_registers(addr, count=1)
         if regs:
             valor = regs[0]
-            if valor_bit == 1:
-                valor = valor | (1 << bit_index)  # Aplica máscara OR para colocar a 1
+            if int(valor_bit) == 1:
+                valor = valor | (1 << int(bit_index))   # Aplica máscara OR para colocar a 1
             else:
-                valor = valor & ~(1 << bit_index) # Aplica máscara AND invertida para colocar a 0
-            
-            # Escreve o novo valor no registrador
+                valor = valor & ~(1 << int(bit_index))  # Aplica máscara AND invertida para colocar a 0
+
             return self.escrever_holding_register(addr, valor)
         return False
 
-# =====================================================================
-# DEMONSTRAÇÕES EXIGIDAS PELA ATIVIDADE ////// USADO IA NO PROCESSO EDUCATIVO \\\\\\ 
-# =====================================================================
-if __name__ == '__main__':
-    c = ClienteMODBUS('localhost', 502)
-    
-    # 3.4 Tratamento de Falhas: Verifica conexão antes de continuar
-    if not c.conectar():
-        print("FALHA: Não foi possível conectar ao servidor Modbus.")
-    else:
-        print("--- CONECTADO AO SERVIDOR ---")
+    def escreve_multiplos_bits(self, addr, indices_str, valores_str):
+        """
+        Altera um ou múltiplos bits de um registrador preservando os restantes.
+        - Bit único: indices_str="6", valores_str="1"
+        - Múltiplos bits: indices_str="0,1,6", valores_str="1,0,1" (ou "1" para aplicar a todos)
+        """
+        try:
+            regs = self.ler_holding_registers(addr, count=1)
+            if not regs:
+                return False
+            valor_reg = regs[0]
 
-        # 3.4 Tratamento de Falhas: Verifica resposta de erro
-        if c.ler_holding_registers(9999) is None:
-            print("FALHA ESPERADA: Endereço 9999 inexistente. A classe sinalizou o erro retornando None.\n")
+            indices_limpo = str(indices_str).strip()
+            valores_limpo = str(valores_str).strip()
 
-        # A) Emulação (Lê os 10 dados com 2 repetições para ver a flutuação)
-        print("[1] EMULAÇÃO (Valores Flutuando):")
-        for i in range(2):
-            print(f" -> Leitura {i+1}:")
-            print(f"    1. TEMP_R: {c.ler_float(700):.1f} | 2. TEMP_S: {c.ler_float(702):.1f} | 3. TEMP_T: {c.ler_float(704):.1f}")
-            print(f"    4. TEMP_CARC: {c.ler_float(706):.1f} | 5. PIT01: {c.ler_float(710):.1f} | 6. FIT01: {c.ler_float(712):.1f}")
-            print(f"    7. Freq: {c.ler_holding_registers(830)[0]} | 8. Corr R: {c.ler_holding_registers(840)[0]}")
-            print(f"    9. Tensao RS: {c.ler_holding_registers(847)[0]} | 10. FP R: {c.ler_holding_registers(868)[0]}")
-            sleep(1.5)
+            if indices_limpo != "":
+                lista_indices = [int(i.strip()) for i in indices_limpo.split(',') if i.strip() != ""]
+                lista_valores = [int(v.strip()) for v in valores_limpo.split(',') if v.strip() != ""]
 
-        # B) Escala
-        print("\n[2] ESCALA (Frequência - Endereço 830):")
-        raw_freq = c.ler_holding_registers(830)[0]
-        print(f"    Recebido: {raw_freq} | Div: 100 | Multiplicador: 0.01 | Engenharia: {raw_freq * 0.01:.2f} Hz")
+                if len(lista_valores) == 1 and len(lista_indices) > 1:
+                    lista_valores = lista_valores * len(lista_indices)
 
-        # C) Float
-        print("\n[3] FLOAT (Setpoint - Endereço 1302):")
-        c.escreve_float(1302, 65.5)
-        print(f"    Enviado: 65.5 | Recuperado: {c.ler_float(1302)}")
+                if len(lista_indices) != len(lista_valores):
+                    return False
 
-        # D) Bits
-        print("\n[4] BITS (Habilita Motor - Endereço 1328):")
-        c.escrever_holding_register(1328, 3) # Começa com bits 0 e 1 em '1'
-        print(f"    16 Bits iniciais (valor 3): {c.ler_bits(1328)}")
-        
-        c.escreve_bit(1328, 6, 1)
-        print(f"    Após LIGAR bit 6:           {c.ler_bits(1328)}")
-        
-        c.escreve_bit(1328, 6, 0)
-        print(f"    Após DESLIGAR bit 6:        {c.ler_bits(1328)}")
-        print("    (Bits 0 e 1 preservados com sucesso!)")
+                for idx, val_bit in zip(lista_indices, lista_valores):
+                    if not (0 <= idx <= 15) or val_bit not in (0, 1):
+                        return False
+                    if val_bit == 1:
+                        valor_reg |= (1 << idx)
+                    else:
+                        valor_reg &= ~(1 << idx)
 
-        c.desconectar()
+                return self.escrever_holding_register(addr, valor_reg)
+
+            return False
+        except Exception:
+            return False
