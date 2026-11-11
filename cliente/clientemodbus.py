@@ -2,15 +2,28 @@ from pymodbus.client import ModbusTcpClient
 from time import sleep
 
 class ClienteMODBUS():
-    """Classe responsável apenas pela comunicação Modbus. Sem prints ou inputs."""
-    def __init__(self, server_ip, porta):
-        self._cliente = ModbusTcpClient(host=server_ip, port=porta)
+    """COMUNICAÇÃO"""
+    def __init__(self, server_ip='localhost', porta=502):
+        self.server_ip = server_ip
+        self.porta = int(porta)
+        self._cliente = ModbusTcpClient(host=self.server_ip, port=self.porta)
+        self.conectado = False
+
+    def configurar_conexao(self, server_ip, porta):
+        """Atualiza IP e porta a partir da interface gráfica."""
+        if self.conectado:
+            self.desconectar()
+        self.server_ip = server_ip
+        self.porta = int(porta)
+        self._cliente = ModbusTcpClient(host=self.server_ip, port=self.porta)
 
     def conectar(self):
-        return self._cliente.connect()
+        self.conectado = bool(self._cliente.connect())
+        return self.conectado
 
     def desconectar(self):
         self._cliente.close()
+        self.conectado = False
 
     def ler_holding_registers(self, addr, count=1):
         resp = self._cliente.read_holding_registers(address=addr, count=count, device_id=1)
