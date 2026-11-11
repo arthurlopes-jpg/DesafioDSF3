@@ -3,13 +3,14 @@ import random
 import struct
 from time import sleep
 
+
 class ServidorMODBUS():
     def __init__(self, host_ip, port):
         # Cria o banco de dados e o servidor (formato moderno)
         self._db = DataBank()
         self._server = ModbusServer(host=host_ip, port=port, no_block=True, data_bank=self._db)
         
-        # Inicialização do Mapa de Dados
+        # Inicialização do Mapa de Dados (Floats e Holding Registers)
         self.set_float(700, 25.0 * 10)  
         self.set_float(702, 25.5 * 10)  
         self.set_float(704, 24.8 * 10)  
@@ -23,6 +24,9 @@ class ServidorMODBUS():
         self._db.set_holding_registers(847, [3800]) 
         self._db.set_holding_registers(868, [950])  
         self._db.set_holding_registers(1328, [0])   # habilita 
+
+        # Inicialização de Coils (endereços 0 a 9 iniciados em False/0, exceto 0 em True)
+        self._db.set_coils(0, [True, False, False, False, False, False, False, False, False, False])
 
     def set_float(self, address, value):
         packed = struct.pack('>f', value)
@@ -68,8 +72,9 @@ class ServidorMODBUS():
                 # Escrita (valor armazenado = valor de engenharia * D)
                 self.set_float(700, temp_r_engenharia * 10.0)
                 
+                coil_0 = self._db.get_coils(0, 1)[0]
                 print('===================================')
-                print(f"Habilita (Bit 6): {habilita_bit6} | SP_PID: {sp_pid:.1f}")
+                print(f"Habilita (Bit 6): {habilita_bit6} | Coil 0: {coil_0} | SP_PID: {sp_pid:.1f}")
                 print(f"FIT01 (Vazão atual): {fit01:.1f} | TEMP_R (Engenharia): {temp_r_engenharia:.2f}")
                 sleep(1)
                 
